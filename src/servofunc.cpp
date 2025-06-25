@@ -90,7 +90,7 @@ void ServoClass::StepMotorInit()
     pinMode(UP_PLUSE_PIN, OUTPUT); digitalWrite(UP_PLUSE_PIN, LOW);
     pinMode(DN_PLUSE_PIN, OUTPUT); digitalWrite(DN_PLUSE_PIN, LOW);
 
-    pinMode(DN_LIMIT_PIN, INPUT_PULLUP);
+    pinMode(DN_LIMIT_PIN, INPUT);
 
     Servo.StepMotorHome();
 
@@ -379,7 +379,7 @@ void ServoClass::MotionStatusReq(uint8_t id)
 {
     static int Old_Pos[3] = {0,0,0};
 
-	if(id == ID_Z) Set_ActPos(ID_Z, GetStepCurrentPos() * SCALEFACTOR);
+	if(id == ID_Z) Set_ActPos(ID_Z, GetStepCurrentPos());
     else
     {
         uint32_t diff, OldAxisStatus = GetNowAxisStatus(id);
@@ -551,13 +551,13 @@ void ServoClass::SendCmdToHost(char* data)
     last_time = millis();
 }
 
+char sendmsg[50];
 void ServoClass::SendPositionToHost(uint8_t id)
 {
-    char sendmsg[21];
-
     memset(sendmsg, 0, sizeof(sendmsg));
 
-    sprintf((char*)sendmsg, "%s:%d", (id == ID_X) ? MOTOR_POS_X : (id == ID_Y) ? MOTOR_POS_Y : MOTOR_POS_Z , Get_ActPos(id)/SCALEFACTOR);//motorpos0:100000000
+    int pos = Get_ActPos(id)/((id == ID_Z) ? 1 : SCALEFACTOR);
+    sprintf((char*)sendmsg, "%s:%d", (id == ID_X) ? MOTOR_POS_X : (id == ID_Y) ? MOTOR_POS_Y : MOTOR_POS_Z , pos);//motorpos0:100000000
     //Serial.print("SendPositionToHost : "); Serial.print(sendmsg); Serial.print(", real : "); Serial.println(Get_ActPos(id));
 
     SendCmdToHost(sendmsg);
@@ -1012,7 +1012,6 @@ void ServoClass::RecvCmdFromPC(char* cmds)
     {
         Serial.println("TRY CONNECT Received...");
 
-        char sendmsg[25];
         memset(sendmsg, 0, sizeof(sendmsg));
 
         sprintf((char*)sendmsg, "%s:%d%d%d", TRY_CONNECT , GetMotorLive(ID_X) == LIVE, GetMotorLive(ID_Y) == LIVE, GetMotorLive(ID_Z) == LIVE);//TryConnection:110
@@ -1028,20 +1027,30 @@ void ServoClass::RecvCmdFromPC(char* cmds)
     {
         Serial.println("MOTOR LIVE TEST Received...");
 
-        char sendmsg[25];
         memset(sendmsg, 0, sizeof(sendmsg));
 
-        sprintf((char*)sendmsg, "%s:%d%d%d", MOTOR_LIVE_TEST , GetMotorLive(ID_X) == LIVE, GetMotorLive(ID_Y) == LIVE, GetMotorLive(ID_Z) == LIVE);
+        sprintf((char*)sendmsg, "%s:%d,%d,%d", MOTOR_LIVE_TEST , GetMotorLive(ID_X) == LIVE, GetMotorLive(ID_Y) == LIVE, GetMotorLive(ID_Z) == LIVE);
         SendCmdToHost(sendmsg);
     }
     else if(!strncmp(cmds, MOTOR_STATUS_REQ, strlen(MOTOR_STATUS_REQ))) /* #servostatusreq*     #servostatusreq,0* */
     {
         Serial.println("Servo Status Req Received...");
 
-        char sendmsg[25];
         memset(sendmsg, 0, sizeof(sendmsg));
 
-        sprintf((char*)sendmsg, "%s:%d%d%d", MOTOR_STATUS_REQ , MotorIsIdle(ID_X) == 1, MotorIsIdle(ID_Y) == 1, MotorIsIdle(ID_Z) == 1);
+        sprintf((char*)sendmsg, "%s:%d,%d,%d", MOTOR_STATUS_REQ , MotorIsIdle(ID_X) == 1, MotorIsIdle(ID_Y) == 1, MotorIsIdle(ID_Z) == 1);
+
+        SendCmdToHost(sendmsg);
+
+        Serial.println(sendmsg);
+    }
+    else if(!strncmp(cmds, MOTOR_POS_REQ, strlen(MOTOR_POS_REQ))) /* #motorposreq*  */
+    {
+        Serial.println("Servo Status Req Received...");
+
+        memset(sendmsg, 0, sizeof(sendmsg));
+
+        sprintf((char*)sendmsg, "%s:%d,%d,%d", MOTOR_POS_REQ , Get_ActPos(ID_X) / SCALEFACTOR, Get_ActPos(ID_Y) / SCALEFACTOR, Get_ActPos(ID_Z));
 
         SendCmdToHost(sendmsg);
 

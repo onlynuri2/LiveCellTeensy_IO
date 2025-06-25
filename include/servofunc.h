@@ -9,9 +9,9 @@
 #define PWM_MAX_VAL 10000 // GUI Max Input
 //#define TEENSY_PWM
 
-#define UP_PLUSE_PIN		30
-#define DN_PLUSE_PIN        31
-#define DN_LIMIT_PIN        32
+#define UP_PLUSE_PIN		31
+#define DN_PLUSE_PIN        32
+#define DN_LIMIT_PIN        24
 
 #define HOME_S_DETECT       (digitalRead(DN_LIMIT_PIN) == HIGH)
 #define HOME_S_DISTANCE     1700
@@ -102,6 +102,7 @@
 #define MOTOR_POS_Z       "motorposz"
 
 #define MOTOR_STATUS_REQ  (char*)"motorstatusreq"
+#define MOTOR_POS_REQ  (char*)"motorposreq"
 
 #define MOTOR_STATUS        (char*)"motorstatus"
 #define MOTOR_STATUS_X        (char*)"motorstatusx"
@@ -144,7 +145,7 @@ class ServoClass {
             memset(MotionStatus, 0, sizeof(MotionStatus));
             memset(MotorLive, -1, sizeof(MotorLive));
             DebugMode = 1;
-            StepTargetPluse = StepCurrentPluse = 0;
+            StepTargetPluse = StepCurrentPluse = -1;
         }
 
         inline int GetMaxDistance(uint8_t id) { return MaxDistance[id]; }

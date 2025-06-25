@@ -17,15 +17,14 @@ void setup() {
 
 	//while (!Serial) {} delay(10);
 
-	pinMode(LED_PIN, OUTPUT); digitalWrite(LED_PIN, LOW);
-	analogWriteRes(16);
+	//pinMode(LED_PIN, OUTPUT); digitalWrite(LED_PIN, LOW);
+	//analogWriteRes(16);
 
 #ifdef TEENSY_PWM
 	PWM_Instance = new Teensy_PWM(LED_PIN, 1000, 0);
 #endif
 
 	Servo.ServoPowerInit();
-
 }
 
 void loop() {
