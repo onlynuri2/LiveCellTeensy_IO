@@ -27,7 +27,7 @@
 #define NONE    -1
 
 #define X_MAX_DIST  30000 * SCALEFACTOR
-#define Y_MAX_DIST  20000 * SCALEFACTOR
+#define Y_MAX_DIST  35000 * SCALEFACTOR
 #define Z_MAX_DIST  14000
 
 #define MAX_SPEED_X       200000
