@@ -23,8 +23,6 @@ void ServoClass::ServoPowerInit()
 {
     Serial.println("Servo Power Init Start -->");
 
-    SetDebugMode(0);
-
     StepMotorInit();
 
     for(uint8_t id = ID_X; id <= ID_Y; id++) { GetSlaveInfo(id); }
@@ -63,7 +61,7 @@ void DnPluseTimerCallBack()
 
     if(HOME_S_DETECT)
     {
-        Servo.SetMotorLive(ID_Z, 1);
+        Servo.SetMotorLive(ID_Z, 0);
         Servo.SetStepCurrentPos(0);
         Servo.SetStepTaretPos(0);
         PluseTimer.end();
@@ -445,6 +443,14 @@ void ServoClass::MotorIdleCheck(uint8_t id)
     }
 }
 
+void softwareReset() {
+    // ARM Cortex-M7 System Reset Request
+    SCB_AIRCR = 0x05FA0004;   // Write VECTKEY (0x5FA) + SYSRESETREQ bit
+    while (1) {
+        // reset 대기 (실제로 이 루프에 도달하지 않음)
+    }
+}
+
 void ServoClass::MotionStatusInfoDisp(uint8_t id, bool add)
 {
     if(add)
@@ -473,7 +479,7 @@ void ServoClass::MotionStatusInfoDisp(uint8_t id, bool add)
     if(Get_FFLAG_ERRORALL(id)) { Serial.println("Get FFLAG ERRORALL Occurred ....."); GetAlarmInfo(id); AlarmReset(id); }
     if(Get_FFLAG_ORIGINRETURNING(id)) { Serial.println("Get FFLAG ORIGINRETURNING Now ....."); }
     if(!Get_FFLAG_INPOSITION(id)) { Serial.println("Get_FFLAG_INPOSITION Required ....."); }
-    if(!Get_FFLAG_SERVOON(id)) { Serial.println("Get FFLAG SERVOON Not Ready ....."); }
+    if(!Get_FFLAG_SERVOON(id)) { Serial.println("Get FFLAG SERVOON Not Ready ....."); softwareReset(); }
     if(Get_FFLAG_ALARMRESET(id)) { Serial.println("Get Get FFLAG ALARMRESET Now ....."); }
     if(!Get_FFLAG_ORIGINRETOK(id)) { Serial.println("Get FFLAG ORIGINRETOK Required ....."); }
     if(Get_FFLAG_MOTIONING(id)) { Serial.println("Get FFLAG MOTIONING Now ....."); }
@@ -501,20 +507,17 @@ void ServoClass::CheckStatus(uint8_t force)
 
     if((force == FORCE_CHECK) || ((millis() - lastchecktimes) >= 300))
     {
-        //SetDebugMode(0);
-
         for(uint8_t id = ID_X; id <= ID_Z; id++) if((GetMotorLive(id) == LIVE) || force) { MotionStatusReq(id); MotorIdleCheck(id); }
-
-        //SetDebugMode(1);
 
         /* Over Distance Error Exception */
         for(uint8_t id = ID_X; id <= ID_Y; id++) 
         {
             if(GetMotorLive(id) != LIVE) continue;
-            if((Get_PosErrs(id) < POS_ERR_MAX) && (Get_ActPos(id) > GetMaxDistance(id)) && Get_FFLAG_MOTIONING(id) && !Get_FFLAG_MOTIONDIR(id)) {
-                
-            MoveEmcStop(id); 
-            Serial.print("Max Distance Over in Check Status ------------ ID : "); Serial.print(id); Serial.print(", Act Pos : "); Serial.print(Get_ActPos(id)); Serial.print(", Max : "); Serial.print(GetMaxDistance(id)); Serial.print(", PosErrs : "); Serial.println(Get_PosErrs(id));            }
+            if((Get_PosErrs(id) < POS_ERR_MAX) && (Get_ActPos(id) > GetMaxDistance(id)) && Get_FFLAG_MOTIONING(id) && !Get_FFLAG_MOTIONDIR(id))
+            {
+                MoveEmcStop(id);
+                Serial.print("Max Distance Over in Check Status ------------ ID : "); Serial.print(id); Serial.print(", Act Pos : "); Serial.print(Get_ActPos(id)); Serial.print(", Max : "); Serial.print(GetMaxDistance(id)); Serial.print(", PosErrs : "); Serial.println(Get_PosErrs(id));
+            }
         }
 
         lastchecktimes = millis();
@@ -548,6 +551,10 @@ void ServoClass::SendCmdToHost(char* data)
     Serial1.write(data);
     Serial1.print('*');
 
+    Serial3.print('#');
+    Serial3.write(data);
+    Serial3.print('*');
+
     last_time = millis();
 }
 
@@ -570,7 +577,6 @@ void ServoClass::SendCmdToServo(uint8_t id, byte* _cmds, uint8_t len)
 {
     if(id == ID_Z) return;
 
-    byte cmds[len + 6];
     uint16_t crc;
     uint8_t waitcnt = WAIT_CNT, FrameType = *(_cmds + 1);
 
@@ -592,17 +598,43 @@ void ServoClass::SendCmdToServo(uint8_t id, byte* _cmds, uint8_t len)
 
     crc = CalcCRCbyAlgorithm(_cmds, (int)len);
 
-    cmds[0] = 0xAA; cmds[1] = 0xCC; cmds[len + 4] = 0xAA; cmds[len + 5] = 0xEE;
-    memcpy(&cmds[2], _cmds, len);
-    memcpy(&cmds[len + 2], &crc, sizeof(uint16_t));
+    byte header[2] = {0xAA, 0xCC};
+    byte tail[2]   = {0xAA, 0xEE};
 
-    Serial2.write(cmds, sizeof(cmds));
+    // 임시 버퍼 (0xAA 중복 가능성 대비)
+    byte buffer[len * 2 + 2 + 4]; // cmds *2 + CRC *2 + header/tail
+    uint8_t pos = 0;
+
+    // header 추가
+    buffer[pos++] = header[0]; buffer[pos++] = header[1];
+
+    // _cmds 부분 처리
+    for (uint8_t i = 0; i < len; i++) {
+        buffer[pos++] = _cmds[i];
+        if (_cmds[i] == 0xAA)
+            buffer[pos++] = 0xAA;
+    }
+
+    // CRC 2바이트 (Low, High 순서)
+    byte crc_low  = crc & 0xFF;
+    byte crc_high = (crc >> 8) & 0xFF;
+    // CRC 각 바이트 검사
+    buffer[pos++] = crc_low;
+    if (crc_low == 0xAA) buffer[pos++] = 0xAA;
+
+    buffer[pos++] = crc_high;
+    if (crc_high == 0xAA) buffer[pos++] = 0xAA;
+
+    // tail 추가 (0xAA 검사 안함)
+    buffer[pos++] = tail[0]; buffer[pos++] = tail[1];
+
+    Serial2.write(buffer, pos);
 
     /* Send Cmd Debug */
     if(GetDebugMode())
     {
-        Serial.print("--> Send Cmd To Servo len is "); Serial.print(len); Serial.print(" :  ");
-        for(uint8_t i=0; i<sizeof(cmds); i++ ) { if (cmds[i] < 0x10) { Serial.print("0"); } Serial.print(cmds[i], HEX); Serial.print(' ');}
+        Serial.print("--> Send Cmd To Servo len is "); Serial.println(pos);
+        for(uint8_t i=0; i<pos; i++ ) { if (buffer[i] < 0x10) { Serial.print("0"); } Serial.print(buffer[i], HEX); Serial.print(' ');}
         Serial.println();
     }
 
@@ -658,7 +690,11 @@ void ServoClass::RecvDataHandlingFromServo(byte* _data, uint8_t len)
         else if(FrameType == FAS_GetAllStatus) SaveGetAllStatus(id, data); //GetAllStatus
     }
     else
+    {
         Serial.println("Wrong Response Received...........");
+        for(uint8_t i=0; i<len; i++) { if (*(data+i) < 0x10) { Serial.print("0"); } Serial.print(*(data+i), HEX); Serial.print(' '); }
+        Serial.println();
+    }
 }
 
 #ifndef TEENSY_PWM

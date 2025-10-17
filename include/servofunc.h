@@ -26,12 +26,12 @@
 #define DEAD    0
 #define NONE    -1
 
-#define X_MAX_DIST  30000 * SCALEFACTOR
-#define Y_MAX_DIST  35000 * SCALEFACTOR
+#define X_MAX_DIST  300000 * SCALEFACTOR
+#define Y_MAX_DIST  350000 * SCALEFACTOR
 #define Z_MAX_DIST  14000
 
-#define MAX_SPEED_X       200000
-#define DEFAULT_SPEED_X   100000
+#define MAX_SPEED_X       99999
+#define DEFAULT_SPEED_X   80000
 
 #define MAX_SPEED_Y       150000
 #define DEFAULT_SPEED_Y   66000
@@ -46,7 +46,7 @@
 
 #define DEFAULT_SPEED       DEFAULT_SPEED_Z
 
-#define SCALEFACTOR       10
+#define SCALEFACTOR       1
 
 #define POS_ERR_MAX     2000
 
