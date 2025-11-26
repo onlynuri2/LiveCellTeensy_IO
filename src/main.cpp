@@ -69,7 +69,7 @@ void SerialEvent_From_PC()
 				if(inChar == '*')
 				{
 					Servo.RecvCmdFromPC(cmdbuf);
-					break;
+					return;
 				}
 				cmdbuf[cnts++] = inChar;
 
@@ -104,7 +104,7 @@ void SerialEvent_From_PC3()
 				if(inChar == '*')
 				{
 					Servo.RecvCmdFromPC(cmdbuf);
-					break;
+					return;
 				}
 				cmdbuf[cnts++] = inChar;
 
@@ -170,12 +170,24 @@ void SerialEvent_From_Servo() //From Servo
 			
 			RemoveDoubleAA(recvbuf, recvLen, removebuf, &removeLen);
 
-			uint16_t recvCRC = (uint16_t)removebuf[recvLen - 4] | ((uint16_t)removebuf[recvLen - 3] << 8);
-			uint16_t calcCRC = CalcCRCbyAlgorithm(&removebuf[2], recvLen - 6);
+			uint16_t recvCRC = (uint16_t)removebuf[removeLen - 4] | ((uint16_t)removebuf[removeLen - 3] << 8);
+			uint16_t calcCRC = CalcCRCbyAlgorithm(&removebuf[2], removeLen - 6);
 
 			if (recvCRC == calcCRC) {
 				Servo.RecvDataHandlingFromServo(removebuf, removeLen);
 				break;
+			}
+			else
+			{
+				Serial.print("MisMatch recvCRC  :  ");Serial.print(recvCRC);	Serial.print(", calcCRC  :  ");Serial.println(calcCRC);
+
+				Serial.print("<-- Recvived Data Servo---  :  ");
+				for(uint8_t i=0; i<recvLen; i++) { if (*(recvbuf+i) < 0x10) { Serial.print("0"); } Serial.print(*(recvbuf+i), HEX); Serial.print(' '); }
+				Serial.println();
+
+				Serial.print("<-- Recvived remo Servo---  :  ");
+				for(uint8_t i=0; i<removeLen; i++) { if (*(removebuf+i) < 0x10) { Serial.print("0"); } Serial.print(*(removebuf+i), HEX); Serial.print(' '); }
+				Serial.println();
 			}
 		}
 
@@ -209,7 +221,7 @@ void SerialEvent_From_PC_Debug()
 				if(inChar == '*')
 				{
 					Servo.RecvCmdFromPC(cmdbuf);
-					break;
+					return;
 				}
 				cmdbuf[cnts++] = inChar;
 

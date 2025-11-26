@@ -40,11 +40,10 @@
 #define Min_SPEED_Z         1000
 #define MAX_PERIOD_Z        1000
 #define MIN_PERIOD_Z        100
-#define INIT_SPEED_Z        6000
-#define DEFAULT_SPEED_Z     MAX_PERIOD_Z - ((INIT_SPEED_Z - Min_SPEED_Z) * (MAX_PERIOD_Z - MIN_PERIOD_Z)) / (MAX_SPEED_Z - Min_SPEED_Z)
+#define DEFAULT_SPEED_Z     8000
 #define GET_SPEED_Z(speed)    MAX_PERIOD_Z - ((speed - Min_SPEED_Z) * (MAX_PERIOD_Z - MIN_PERIOD_Z)) / (MAX_SPEED_Z - Min_SPEED_Z)
 
-#define DEFAULT_SPEED       DEFAULT_SPEED_Z
+#define DEFAULT_SPEED       DEFAULT_SPEED_Y
 
 #define SCALEFACTOR       1
 
@@ -100,6 +99,7 @@
 #define MOTOR_POS_X       "motorposx"
 #define MOTOR_POS_Y       "motorposy"
 #define MOTOR_POS_Z       "motorposz"
+#define MOTOR_POS_XYZ       "motorposxyz"
 
 #define MOTOR_STATUS_REQ  (char*)"motorstatusreq"
 #define MOTOR_POS_REQ  (char*)"motorposreq"
@@ -133,14 +133,14 @@ class ServoClass {
         int8_t MotorLive[3];
 
         int MaxDistance[3];
-        uint32_t MaxSpeed[3];
+        uint32_t DefaultSpeed[3];
 
         int StepTargetPluse;
         int StepCurrentPluse;
 
     public:
 
-        ServoClass() : MaxDistance{ X_MAX_DIST, Y_MAX_DIST, Z_MAX_DIST }, MaxSpeed{ DEFAULT_SPEED_X, DEFAULT_SPEED_Y, DEFAULT_SPEED_Z }
+        ServoClass() : MaxDistance{ X_MAX_DIST, Y_MAX_DIST, Z_MAX_DIST }, DefaultSpeed{ DEFAULT_SPEED_X, DEFAULT_SPEED_Y, DEFAULT_SPEED_Z }
         { 
             memset(MotionStatus, 0, sizeof(MotionStatus));
             memset(MotorLive, -1, sizeof(MotorLive));
@@ -149,7 +149,7 @@ class ServoClass {
         }
 
         inline int GetMaxDistance(uint8_t id) { return MaxDistance[id]; }
-        inline int GetMoveSpeed(uint8_t id) { return MaxSpeed[id]; }
+        inline int GetDefaultSpeed(uint8_t id) { return DefaultSpeed[id]; }
 
         inline void SetDebugMode(uint8_t _debug) { DebugMode = _debug; }
         inline uint8_t GetDebugMode() { return DebugMode; }
@@ -161,7 +161,8 @@ class ServoClass {
 
         
         void SendCmdToHost(char* data);
-        void SendPositionToHost(uint8_t id);
+        //void SendPositionToHost(uint8_t id);
+        void SendPosition_XYZ_ToHost();
         void SendCmdToServo(uint8_t id, byte* _cmds, uint8_t len);
         void RecvDataHandlingFromServo(byte* _data, uint8_t len);
         void RecvCmdFromPC(char* cmds);
@@ -191,7 +192,8 @@ class ServoClass {
 
         void MotionStatusReq(uint8_t id);
         void MotionStatusInfoDisp(uint8_t id, bool add = false);
-        void MotorIdleCheck(uint8_t id);
+        //void MotorIdleCheck(uint8_t id);
+        void MotorIdleCheck_XYZ(uint8_t force = 0);
 
         void ClearPosition(uint8_t id);                                             /* 0x56 */
 
@@ -206,7 +208,7 @@ class ServoClass {
         inline MOTIONStatus* GetMotionStatusInfo(uint8_t id) { return &MotionStatus[id]; }
 
         inline uint8_t MotorIsIdle(uint8_t id) {
-            if(id == ID_Z) return (StepTargetPluse == StepCurrentPluse);
+            if(id == ID_Z) return ((GetMotorLive(id) == LIVE) && (StepTargetPluse == StepCurrentPluse));
             else
             return ( GetMotorLive(id) && !Get_FFLAG_ERRORALL(id) && !Get_FFLAG_ORIGINRETURNING(id) && Get_FFLAG_INPOSITION(id) && Get_FFLAG_SERVOON(id) && !Get_FFLAG_ALARMRESET(id) && Get_FFLAG_ORIGINRETOK(id) && !Get_FFLAG_MOTIONING(id) ); 
         }
@@ -256,7 +258,7 @@ class ServoClass {
 
         void StepMotorInit();
         void StepMotorHome();
-        void MoveStepMotor(uint8_t dir, int pos, int speed = DEFAULT_SPEED_Z);
+        void MoveStepMotor(uint8_t dir, int pos, int speed = GET_SPEED_Z(DEFAULT_SPEED_Z));
         inline void SetStepTaretPos(int pluse) { StepTargetPluse = pluse; }
         inline int GetStepTaretPos() { return StepTargetPluse; }
         inline void SetStepCurrentPos(int pluse) { StepCurrentPluse = pluse; }

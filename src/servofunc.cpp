@@ -61,14 +61,16 @@ void DnPluseTimerCallBack()
 
     if(HOME_S_DETECT)
     {
-        Servo.SetMotorLive(ID_Z, 0);
+        Servo.SetMotorLive(ID_Z, LIVE);
         Servo.SetStepCurrentPos(0);
         Servo.SetStepTaretPos(0);
         PluseTimer.end();
     }
-    else if((Servo.GetMotorLive(ID_Z) == LIVE) && ((Servo.GetStepCurrentPos() == Servo.GetStepTaretPos()) || ((Servo.GetStepCurrentPos() <= 0))))
+    else if(((Servo.GetStepCurrentPos() == Servo.GetStepTaretPos()) || ((Servo.GetStepCurrentPos() <= 0))))
     {
         PluseTimer.end();
+
+        if(Servo.GetMotorLive(ID_Z) != LIVE) { Servo.SetMotorLive(ID_Z, DEAD); Serial.println("ID_Z Not Working *.*"); }
     }
 }
 
@@ -76,9 +78,11 @@ void ServoClass::MoveStepMotor(uint8_t dir, int pos, int speed)//0:down, 1:up
 {
     SetStepTaretPos(pos);
 
+    if(Servo.GetMotorLive(ID_Z) == DEAD) { Serial.println("ID_Z Dead. Return.."); return; }
     if((Servo.GetMotorLive(ID_Z) == LIVE) && (GetStepTaretPos() == GetStepCurrentPos())) { Serial.println("Step Z Same Position. Return.."); return; }
 
     PluseTimer.end();
+    Serial.println("Pluse Timer Start...");
     if(dir == UP_PLUSE_PIN) PluseTimer.begin(UpPluseTimerCallBack, speed);
     else PluseTimer.begin(DnPluseTimerCallBack, speed);
 }
@@ -92,8 +96,9 @@ void ServoClass::StepMotorInit()
 
     Servo.StepMotorHome();
 
-    Serial.print("DEFAULT SPEED Z : "); Serial.println(DEFAULT_SPEED_Z);
-    Serial.print("Max SPEED Z : "); Serial.println( GET_SPEED_Z(MAX_SPEED_Z));
+    //Serial.print("DEFAULT SPEED Z : "); Serial.println(DEFAULT_SPEED_Z);
+    //Serial.print("GET_SPEED_Z Z : "); Serial.println(GET_SPEED_Z(DEFAULT_SPEED_Z));
+    //Serial.print("Max SPEED Z : "); Serial.println( GET_SPEED_Z(MAX_SPEED_Z));
 }
 void ServoClass::StepMotorHome()
 {
@@ -101,11 +106,14 @@ void ServoClass::StepMotorHome()
     {
         uint8_t cnt = 0;
         
-        MoveStepMotor(UP_PLUSE_PIN, HOME_S_DISTANCE, GET_SPEED_Z(MAX_SPEED_Z));
+        MoveStepMotor(UP_PLUSE_PIN, HOME_S_DISTANCE);
 
-        while( HOME_S_DETECT && ++cnt ){ delay(1); }
+        Serial.println("HOME Sensor Boot DETECT...");
 
-        if(HOME_S_DETECT) Serial.println("HOME Sensor Boot DETECT...");
+        while( ++cnt && HOME_S_DETECT ){ delay(1); }//1sec
+
+        if(!cnt) { SetMotorLive(ID_Z, DEAD); Serial.println("ID_Z Not Working return *.*"); return; }
+        else { Serial.print("HOME Sensor DETECT cnt : "); Serial.println(cnt); }
     }
 
     if(GetMotorLive(ID_Z) == LIVE) SetStepCurrentPos(GetStepCurrentPos() + 1000);
@@ -184,7 +192,7 @@ void ServoClass::GetAlarmInfo(uint8_t id)
 ******************************************************************************/
 void ServoClass::MoveStop(uint8_t id)
 {
-    if(id == ID_Z) { PluseTimer.end(); return; }
+    if(id == ID_Z) { PluseTimer.end(); SetStepTaretPos(GetStepCurrentPos()); return; }
 
     byte data[] = { id, 0x31 };
     SendCmdToServo(id, data, sizeof(data));
@@ -226,13 +234,19 @@ void ServoClass::MoveSingleAbs(uint8_t id, int pos, uint32_t speed)
         return; 
     }
 
-    byte data[] = { id, 0x34, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00 };
-
     if( pos > GetMaxDistance(id) )
     {
         Serial.print("Move Single Abs ID : "); Serial.print(id); Serial.print(" Position Over Distance.. - "); Serial.println(pos);
         return;
     }
+
+    if(MotorIsIdle(id) == false)
+    {
+        MoveSingleAbsOver(id, pos);
+        return;
+    }
+
+    byte data[] = { id, 0x34, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00 };
 
     memcpy(&data[2], &pos, sizeof(int));
     memcpy(&data[6], &speed, sizeof(uint32_t));
@@ -267,8 +281,6 @@ void ServoClass::MoveJog(uint8_t id, uint8_t direction, uint32_t speed)
     }
 
     byte data[] = { id, 0x37, 0x00, 0x00, 0x00, 0x00, 0x00 };
-
-    if((id == ID_Z) && (speed == 20000) && !direction) speed = 19000;//motor bug??
 
     memcpy(&data[2], &speed, sizeof(int));
     memcpy(&data[6], &direction, sizeof(uint8_t));
@@ -314,6 +326,7 @@ void ServoClass::MoveSingleIncOver(uint8_t id, int pos)
 void ServoClass::MoveAllStop()
 {
     PluseTimer.end();
+    SetStepTaretPos(GetStepCurrentPos());
 
     byte data[] = { ALLID, 0x3B };
     SendCmdToServo(ALLID, data, sizeof(data));
@@ -335,7 +348,9 @@ void ServoClass::MoveAllEmcStop()
 ******************************************************************************/
 void ServoClass::MoveAllOrg()
 {
-    StepMotorHome();
+    //if(GetMotorLive(ID_X) == LIVE) MoveOrg(ID_X);
+    //if(GetMotorLive(ID_Y) == LIVE) MoveOrg(ID_Y);
+    if(GetMotorLive(ID_Z) == LIVE) StepMotorHome();
 
     byte data[] = { ALLID, 0x3D };
     SendCmdToServo(ALLID, data, sizeof(data));
@@ -375,8 +390,6 @@ void ServoClass::MoveAllSingleInc(int pos, uint32_t speed)
 ******************************************************************************/
 void ServoClass::MotionStatusReq(uint8_t id)
 {
-    static int Old_Pos[3] = {0,0,0};
-
 	if(id == ID_Z) Set_ActPos(ID_Z, GetStepCurrentPos());
     else
     {
@@ -402,14 +415,12 @@ void ServoClass::MotionStatusReq(uint8_t id)
                     if(((shift << i) == FFLAG_SERVOON) && ((shift << i) & GetNowAxisStatus(id))) { MoveOrg(id); }
                     else if(((shift << i) == FFLAG_INPOSITION) && ((shift << i) & GetNowAxisStatus(id)))
                     {
-                        //SendPositionToHost(id);
                         //Serial.print("Inposition Complete. @@ id : "); Serial.println(id);
                     }
                     else if((shift << i) == FFLAG_ORIGINRETOK)
                     {
                         //Serial.println("Clear Position-------------------------------------");
                         //ClearPosition(id);
-                        //SendPositionToHost(id);
                     }
                 }
             }
@@ -417,14 +428,12 @@ void ServoClass::MotionStatusReq(uint8_t id)
             //MotionStatusInfoDisp(id);
         }
     }
-
-    /* Send to HOST Current Position */
-    if(Get_ActPos(id) != Old_Pos[id]) { Old_Pos[id] = Get_ActPos(id); SendPositionToHost(id); }
 }
 
 /*****************************************************************************
                  Motion Status Check
 ******************************************************************************/
+#if 0
 void ServoClass::MotorIdleCheck(uint8_t id)
 {
     static int8_t Old_Status[3] = {-1,-1,-1};
@@ -440,6 +449,33 @@ void ServoClass::MotorIdleCheck(uint8_t id)
 
         //if(MotorIsIdle(id)) { Serial.print(id); Serial.println(" Motor Status *********************** I D L E **************************"); }
         //else { Serial.print(id); Serial.println(" Motor Status *********************** B U S Y **************************"); }
+    }
+}
+#endif
+
+char sendmsg[50];
+void ServoClass::MotorIdleCheck_XYZ(uint8_t force)
+{
+    static int8_t Old_Status[3] = {-1,-1,-1};
+    uint8_t update = 0;
+
+    for(uint8_t id = ID_X; id <= ID_Z; id++)
+    {
+        if(GetMotorLive(id) != LIVE) continue;
+
+        if( MotorIsIdle(id) != Old_Status[id] )
+        {
+            Old_Status[id] = MotorIsIdle(id);
+            update = 1;
+        }    
+    }
+
+    if(update || force)
+    {
+        sprintf((char*)sendmsg, "%s:%d,%d,%d", MOTOR_STATUS_REQ , MotorIsIdle(ID_X) == 1, MotorIsIdle(ID_Y) == 1, MotorIsIdle(ID_Z) == 1);
+        SendCmdToHost(sendmsg);
+
+        Serial.println(sendmsg);
     }
 }
 
@@ -504,35 +540,37 @@ void ServoClass::ClearPosition(uint8_t id)
 void ServoClass::CheckStatus(uint8_t force)
 {
     static unsigned long lastchecktimes;
+    static int Old_Pos[3] = {-1,-1,-1};
 
     if((force == FORCE_CHECK) || ((millis() - lastchecktimes) >= 300))
     {
-        for(uint8_t id = ID_X; id <= ID_Z; id++) if((GetMotorLive(id) == LIVE) || force) { MotionStatusReq(id); MotorIdleCheck(id); }
-
-        /* Over Distance Error Exception */
-        for(uint8_t id = ID_X; id <= ID_Y; id++) 
-        {
-            if(GetMotorLive(id) != LIVE) continue;
-            if((Get_PosErrs(id) < POS_ERR_MAX) && (Get_ActPos(id) > GetMaxDistance(id)) && Get_FFLAG_MOTIONING(id) && !Get_FFLAG_MOTIONDIR(id))
-            {
-                MoveEmcStop(id);
-                Serial.print("Max Distance Over in Check Status ------------ ID : "); Serial.print(id); Serial.print(", Act Pos : "); Serial.print(Get_ActPos(id)); Serial.print(", Max : "); Serial.print(GetMaxDistance(id)); Serial.print(", PosErrs : "); Serial.println(Get_PosErrs(id));
-            }
-        }
+        for(uint8_t id = ID_X; id <= ID_Z; id++) if((GetMotorLive(id) == LIVE) || force) { MotionStatusReq(id); }
 
         lastchecktimes = millis();
+
+        /* Send to HOST Current Position */
+        uint8_t update = 0;
+        for(uint8_t id = ID_X; id < ID_Z; id++)
+        {
+            if((GetMotorLive(id) == LIVE) && (Get_ActPos(id) != Old_Pos[id])) { Old_Pos[id] = Get_ActPos(id); update = 1;}
+        }
+
+        if(GetStepCurrentPos() != Old_Pos[ID_Z]) { Old_Pos[ID_Z] = GetStepCurrentPos(); update = 1; }
+
+        if(update) { SendPosition_XYZ_ToHost(); }
+        else MotorIdleCheck_XYZ();
 
 #if 1
         static uint8_t oldval = 0, newval;
         {
-            
             newval = digitalRead(DN_LIMIT_PIN);
             if( newval != oldval )
             {
                 oldval = newval;
 
                 if(HOME_S_DETECT) Serial.println("HOME Sensor OOOOO");
-                else Serial.println("HOME Sensor XXXXX");            }
+                else Serial.println("HOME Sensor XXXXX");
+            }
         }
 #endif
     }
@@ -558,15 +596,28 @@ void ServoClass::SendCmdToHost(char* data)
     last_time = millis();
 }
 
-char sendmsg[50];
+#if 0
 void ServoClass::SendPositionToHost(uint8_t id)
 {
     memset(sendmsg, 0, sizeof(sendmsg));
 
     int pos = Get_ActPos(id)/((id == ID_Z) ? 1 : SCALEFACTOR);
     sprintf((char*)sendmsg, "%s:%d", (id == ID_X) ? MOTOR_POS_X : (id == ID_Y) ? MOTOR_POS_Y : MOTOR_POS_Z , pos);//motorpos0:100000000
-    //Serial.print("SendPositionToHost : "); Serial.print(sendmsg); Serial.print(", real : "); Serial.println(Get_ActPos(id));
+    //Serial.print("Send Position To Host : "); Serial.print(sendmsg); Serial.print(", real : "); Serial.println(Get_ActPos(id));
 
+    SendCmdToHost(sendmsg);
+}
+#endif
+void ServoClass::SendPosition_XYZ_ToHost()
+{
+    memset(sendmsg, 0, sizeof(sendmsg));
+
+    int posx = Get_ActPos(ID_X) / SCALEFACTOR;
+    int posy = Get_ActPos(ID_Y) / SCALEFACTOR;
+    int posz = Servo.GetStepCurrentPos();
+
+    sprintf((char*)sendmsg, "%s,%d,%d,%d", MOTOR_POS_XYZ, posx, posy, posz);
+    Serial.print("SendPositionXYZToHost : "); Serial.println(sendmsg);
     SendCmdToHost(sendmsg);
 }
 
@@ -577,14 +628,16 @@ void ServoClass::SendCmdToServo(uint8_t id, byte* _cmds, uint8_t len)
 {
     if(id == ID_Z) return;
 
+    if((id != ALLID) && GetMotorLive(id) == DEAD) return;
+
+    MotorIdleCheck_XYZ();
+
     uint16_t crc;
     uint8_t waitcnt = WAIT_CNT, FrameType = *(_cmds + 1);
 
     static unsigned long last_time = 0;
 
     if((millis() - last_time) < SERVO_DLY) { delay(SERVO_DLY - (millis() - last_time)); }
-
-    //if((id != ALLID) && (Servo.GetMotorLive(id) == DEAD)) { if(GetDebugMode()) { Serial.print("Send Cmd To Servo Motor Not Live Error --- ID : "); Serial.println(id); } return; }
 
     if((id != ALLID) && (Get_FFLAG_ERRORALL(id) || !Get_FFLAG_SERVOON(id)))// || Get_FFLAG_ORIGINRETURNING(id) || !Get_FFLAG_ORIGINRETOK(id))
     {
@@ -642,11 +695,14 @@ void ServoClass::SendCmdToServo(uint8_t id, byte* _cmds, uint8_t len)
 
     /* Instant response received */
     while( ++waitcnt ) {  if(Serial2.available()) { break; } delayMicroseconds(20); }//1600u
-    SerialEvent_From_Servo();
 
     if(!waitcnt) {
         Serial.print("waitcnt Error ---- "); Serial.println(waitcnt);
-        if((FrameType == FAS_GetSlaveInfo)) Servo.SetMotorLive(id, 0);//Frame Type - Get Slave Info
+        if((FrameType == FAS_GetSlaveInfo)) Servo.SetMotorLive(id, DEAD);//Frame Type - Get Slave Info
+    }
+    else
+    {
+        SerialEvent_From_Servo();
     }
 
     last_time = millis();
@@ -892,7 +948,7 @@ void ServoClass::RecvCmdFromPC(char* cmds)
         if(id != ID_Z) pos *= SCALEFACTOR;
 
         // 속도값 있는지 확인
-        int speed = GetMoveSpeed(id); // 기본 속도
+        int speed = GetDefaultSpeed(id); // 기본 속도
         char* speedptr = strchr(cmdptr, ',');
 
         if (speedptr) {
@@ -931,7 +987,7 @@ void ServoClass::RecvCmdFromPC(char* cmds)
 
             // 다음 토큰이 속도인지, 아니면 다음 축인지 판단
             char* next = strtok(NULL, ",");
-            int speed = GetMoveSpeed(id); // 기본 속도
+            int speed = GetDefaultSpeed(id); // 기본 속도
 
             if (next && (next[0] != 'x' && next[0] != 'y' && next[0] != 'z')) {
                 speed = atoi(next);
@@ -954,7 +1010,7 @@ void ServoClass::RecvCmdFromPC(char* cmds)
             id = *(++cmdptr) - 'x';
             if(MOTOR_ALL_ID_CHECK) { Serial.print("! MOVEORG Wrong ID : ");Serial.println(id); return; }
 
-            speed = GetMoveSpeed(id);
+            speed = GetDefaultSpeed(id);
 
             cmdptr = strchr(cmdptr, ',');
             if(cmdptr)
@@ -1008,12 +1064,12 @@ void ServoClass::RecvCmdFromPC(char* cmds)
 
             if(!strncmp(cmds, MOVEALL_S_ABS, strlen(MOVEALL_S_ABS)))
             {
-                for(uint8_t id = ID_X; id <= ID_Z; id++) { if(GetMotorLive(id) == LIVE) { speed = GetMoveSpeed(id); MoveSingleAbs(id, pos, speed); }}
+                for(uint8_t id = ID_X; id <= ID_Z; id++) { if(GetMotorLive(id) == LIVE) { speed = GetDefaultSpeed(id); MoveSingleAbs(id, pos, speed); }}
                 //MoveAllSingleAbs(pos, speed);
             }
             else
             {
-                for(uint8_t id = ID_X; id <= ID_Z; id++) { if(GetMotorLive(id) == LIVE) { speed = GetMoveSpeed(id); MoveSingleInc(id, pos, speed); }}
+                for(uint8_t id = ID_X; id <= ID_Z; id++) { if(GetMotorLive(id) == LIVE) { speed = GetDefaultSpeed(id); MoveSingleInc(id, pos, speed); }}
                 //MoveAllSingleInc(pos, speed);
             }
         }
@@ -1055,9 +1111,7 @@ void ServoClass::RecvCmdFromPC(char* cmds)
         SendCmdToHost(sendmsg);
 
         delay(1);
-        SendPositionToHost(ID_X); delay(1);
-        SendPositionToHost(ID_Y); delay(1);
-        SendPositionToHost(ID_Z);
+        SendPosition_XYZ_ToHost();
     }
     else if(!strncmp(cmds, MOTOR_LIVE_TEST, strlen(MOTOR_LIVE_TEST)))
     {
@@ -1071,7 +1125,9 @@ void ServoClass::RecvCmdFromPC(char* cmds)
     else if(!strncmp(cmds, MOTOR_STATUS_REQ, strlen(MOTOR_STATUS_REQ))) /* #servostatusreq*     #servostatusreq,0* */
     {
         Serial.println("Servo Status Req Received...");
-
+#if 1
+        MotorIdleCheck_XYZ(1);
+#else
         memset(sendmsg, 0, sizeof(sendmsg));
 
         sprintf((char*)sendmsg, "%s:%d,%d,%d", MOTOR_STATUS_REQ , MotorIsIdle(ID_X) == 1, MotorIsIdle(ID_Y) == 1, MotorIsIdle(ID_Z) == 1);
@@ -1079,10 +1135,11 @@ void ServoClass::RecvCmdFromPC(char* cmds)
         SendCmdToHost(sendmsg);
 
         Serial.println(sendmsg);
+#endif
     }
     else if(!strncmp(cmds, MOTOR_POS_REQ, strlen(MOTOR_POS_REQ))) /* #motorposreq*  */
     {
-        Serial.println("Servo Status Req Received...");
+        Serial.println("Servo Position Req Received...");
 
         memset(sendmsg, 0, sizeof(sendmsg));
 
@@ -1091,6 +1148,10 @@ void ServoClass::RecvCmdFromPC(char* cmds)
         SendCmdToHost(sendmsg);
 
         Serial.println(sendmsg);
+    }
+    else if(!strncmp(cmds, MOTOR_POS_XYZ, strlen(MOTOR_POS_XYZ)))
+    {
+        SendPosition_XYZ_ToHost();
     }
     else if(!strncmp(cmds, LEDBR, strlen(LEDBR)))
     {
