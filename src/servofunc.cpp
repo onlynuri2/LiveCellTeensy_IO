@@ -272,22 +272,18 @@ void ServoClass::MoveSingleInc(uint8_t id, int pos, uint32_t speed)
 ******************************************************************************/
 void ServoClass::MoveJog(uint8_t id, uint8_t direction, uint32_t speed)
 {
-    if(id == ID_Z)
-    {
-        uint8_t dir = (direction > GetStepCurrentPos()) ? UP_PLUSE_PIN : DN_PLUSE_PIN;;
+    Serial.print("Move Jog ID : "); Serial.print(id); Serial.print(", direction : "); Serial.print(direction); Serial.print(", speed : "); Serial.println(speed);
 
-        MoveStepMotor(dir, (dir == UP_PLUSE_PIN) ? Z_MAX_DIST : 0, GET_SPEED_Z(speed));
-        return; 
-    }
+    MoveSingleAbs(id, (direction == 1) ? GetMaxDistance(id) : 0, speed);
 
+#if 0//jog command disabled, use MoveSingleAbs instead
     byte data[] = { id, 0x37, 0x00, 0x00, 0x00, 0x00, 0x00 };
 
     memcpy(&data[2], &speed, sizeof(int));
     memcpy(&data[6], &direction, sizeof(uint8_t));
 
     SendCmdToServo(id, data, sizeof(data));
-
-    Serial.print("Move Jog ID : "); Serial.print(id); Serial.print(", direction : "); Serial.print(direction); Serial.print(", speed : "); Serial.println(speed);
+#endif
 }
 
 /*****************************************************************************

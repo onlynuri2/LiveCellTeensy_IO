@@ -17,6 +17,8 @@ void setup() {
 	Serial2.begin(115200);//RS-485
 	Serial3.begin(115200);
 
+	delay(100);
+	Serial.println("---- MCU Start ----");
 	//while (!Serial) {} delay(10);
 
 	//pinMode(LED_PIN, OUTPUT); digitalWrite(LED_PIN, LOW);
