@@ -11,6 +11,8 @@ void SerialEvent_From_PC_Debug();
 
 void setup() {
 
+	pinMode(STEP_UP_EN_PIN, OUTPUT); digitalWrite(STEP_UP_EN_PIN, HIGH);
+
   // initialize serial:
 	Serial.begin(115200);//Download, Debug
 	Serial1.begin(115200);//Host(PC) Ez-Servo
@@ -18,8 +20,8 @@ void setup() {
 	Serial3.begin(115200);
 
 	delay(100);
+	//while (!Serial) {} delay(1);
 	Serial.println("---- MCU Start ----");
-	//while (!Serial) {} delay(10);
 
 	//pinMode(LED_PIN, OUTPUT); digitalWrite(LED_PIN, LOW);
 	//analogWriteRes(16);
@@ -187,7 +189,7 @@ void SerialEvent_From_Servo() //From Servo
 				for(uint8_t i=0; i<recvLen; i++) { if (*(recvbuf+i) < 0x10) { Serial.print("0"); } Serial.print(*(recvbuf+i), HEX); Serial.print(' '); }
 				Serial.println();
 
-				Serial.print("<-- Recvived remo Servo---  :  ");
+				Serial.print("<-- Recvived remove Servo---  :  ");
 				for(uint8_t i=0; i<removeLen; i++) { if (*(removebuf+i) < 0x10) { Serial.print("0"); } Serial.print(*(removebuf+i), HEX); Serial.print(' '); }
 				Serial.println();
 			}

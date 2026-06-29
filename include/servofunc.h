@@ -13,6 +13,8 @@
 #define DN_PLUSE_PIN        32
 #define DN_LIMIT_PIN        24
 
+#define STEP_UP_EN_PIN      12
+
 #define HOME_S_DETECT       (digitalRead(DN_LIMIT_PIN) == HIGH)
 #define HOME_S_DISTANCE     1700
 
@@ -26,7 +28,7 @@
 #define DEAD    0
 #define NONE    -1
 
-#define X_MAX_DIST  300000 * SCALEFACTOR
+#define X_MAX_DIST  350000 * SCALEFACTOR
 #define Y_MAX_DIST  350000 * SCALEFACTOR
 #define Z_MAX_DIST  14000
 

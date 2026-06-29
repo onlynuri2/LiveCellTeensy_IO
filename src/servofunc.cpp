@@ -731,7 +731,7 @@ void ServoClass::RecvDataHandlingFromServo(byte* _data, uint8_t len)
     {
         if(FrameType == FAS_GetSlaveInfo) //Get Slave Info
         {
-            SetMotorLive(id, *(data+5) == 0x32);
+            SetMotorLive(id, *(data+5) == 0x32);//Slave 종류 : 1(0x01) : Ezi-SERVO Plus-R ST, 20(0x14) : Ezi-STEP Plus-R ST, 50(0x32) : Ezi-SERVO Plus-R MINI 등
             Serial.print("Set Motor Live id : "); Serial.print(id); Serial.print(", Live : "); Serial.println(*(data+5) == 0x32);
         }
         else if(FrameType == FAS_GetParameter) { Serial.print("Get Parm : "); Serial.println(*((uint32_t*)(data + 5))); }
