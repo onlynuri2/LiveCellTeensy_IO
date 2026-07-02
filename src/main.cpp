@@ -156,9 +156,8 @@ void RemoveDoubleAA(uint8_t* src, uint8_t len, uint8_t* dest, uint8_t* newLen)
 void SerialEvent_From_Servo() //From Servo
 {
 	byte recvbuf[66];
-	byte removebuf[66];
 	byte inChar;
-	uint8_t recvLen = 0, removeLen = 0;
+	uint8_t recvLen = 0;
 	uint8_t waitcnt = WAIT_CNT;
 
 	while (Serial2.available()) {
@@ -168,17 +167,38 @@ void SerialEvent_From_Servo() //From Servo
 		if((recvLen == 0) && (inChar != 0xAA)) break;
 		else if((recvLen == 1) && (inChar != 0xCC)) break;
 
+		if(recvLen && inChar == 0xAA)
+		{
+			while( ++waitcnt ) { if(Serial2.available()) break; delayMicroseconds(1); }
+
+			if(!waitcnt) break;
+
+			char peekData = Serial2.peek();
+			if(peekData == 0xAA) Serial2.read();
+			else if(peekData == 0xEE)
+			{
+				recvbuf[recvLen++] = inChar;
+				inChar = Serial2.read();
+			}
+			else
+			{
+				Serial.println("Protocol Error");
+				break;
+			}
+			
+			waitcnt = WAIT_CNT;
+		}
+
 		recvbuf[recvLen++] = inChar;
 
-		if((recvbuf[recvLen-2] == 0xAA) && (recvbuf[recvLen-1] == 0xEE)) {
-			
-			RemoveDoubleAA(recvbuf, recvLen, removebuf, &removeLen);
+		if(recvLen >= 4 && (recvbuf[recvLen-2] == 0xAA) && (recvbuf[recvLen-1] == 0xEE)) {
 
-			uint16_t recvCRC = (uint16_t)removebuf[removeLen - 4] | ((uint16_t)removebuf[removeLen - 3] << 8);
-			uint16_t calcCRC = CalcCRCbyAlgorithm(&removebuf[2], removeLen - 6);
+
+			uint16_t recvCRC = (uint16_t)recvbuf[recvLen - 4] | ((uint16_t)recvbuf[recvLen - 3] << 8);
+			uint16_t calcCRC = CalcCRCbyAlgorithm(&recvbuf[2], recvLen - 6);
 
 			if (recvCRC == calcCRC) {
-				Servo.RecvDataHandlingFromServo(removebuf, removeLen);
+				Servo.RecvDataHandlingFromServo(recvbuf, recvLen);
 				break;
 			}
 			else
@@ -187,10 +207,6 @@ void SerialEvent_From_Servo() //From Servo
 
 				Serial.print("<-- Recvived Data Servo---  :  ");
 				for(uint8_t i=0; i<recvLen; i++) { if (*(recvbuf+i) < 0x10) { Serial.print("0"); } Serial.print(*(recvbuf+i), HEX); Serial.print(' '); }
-				Serial.println();
-
-				Serial.print("<-- Recvived remove Servo---  :  ");
-				for(uint8_t i=0; i<removeLen; i++) { if (*(removebuf+i) < 0x10) { Serial.print("0"); } Serial.print(*(removebuf+i), HEX); Serial.print(' '); }
 				Serial.println();
 			}
 		}
