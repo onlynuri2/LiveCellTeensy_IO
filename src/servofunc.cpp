@@ -554,7 +554,6 @@ void ServoClass::CheckStatus(uint8_t force)
         if(GetStepCurrentPos() != Old_Pos[ID_Z]) { Old_Pos[ID_Z] = GetStepCurrentPos(); update = 1; }
 
         if(update) { SendPosition_XYZ_ToHost(); }
-        else MotorIdleCheck_XYZ();
 
 #if 1
         static uint8_t oldval = 0, newval;
